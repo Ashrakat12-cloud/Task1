@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Newton-Raphson Solver</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap">
+<style>
+:root{--bg:#f2f5fa;--card:#fff;--ink:#16202e;--mute:#5b6779;--line:#d3dbe7;--acc:#1f4fd8;--accfg:#fff;--ok:#12805a;--pt:#d6336c;--code:#0f1a2b;--codefg:#d9e4f5;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e1522;--card:#151f31;--ink:#e6edf8;--mute:#93a1b8;--line:#2a3750;--acc:#6c95ff;--accfg:#0b1220;--ok:#43d19a;--pt:#ff6b9d;--code:#0a111d;--codefg:#d9e4f5}}
+:root[data-theme="dark"]{--bg:#0e1522;--card:#151f31;--ink:#e6edf8;--mute:#93a1b8;--line:#2a3750;--acc:#6c95ff;--accfg:#0b1220;--ok:#43d19a;--pt:#ff6b9d;--code:#0a111d;--codefg:#d9e4f5}
+*{box-sizing:border-box}
+html{color-scheme:light dark}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Cairo,Tahoma,Arial,sans-serif;line-height:1.7;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:32px 32px;background-attachment:fixed}
+main{max-width:1100px;margin:0 auto;padding:20px 16px 40px}
+header{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin-bottom:14px}
+h1{margin:0;font-size:1.7rem;font-weight:800;direction:ltr;text-align:right}
+header p{margin:4px 0 0;color:var(--mute)}
+.note{background:var(--card);border-inline-start:4px solid var(--acc);padding:10px 14px;margin-bottom:14px;border-radius:6px;color:var(--mute);font-size:.95rem}
+.tabs{display:flex;gap:8px;margin-bottom:12px}
+.tabs button{font:inherit;font-weight:600;padding:8px 16px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;cursor:pointer}
+.tabs button[aria-selected="true"]{background:var(--acc);color:var(--accfg);border-color:var(--acc)}
+button:focus-visible,input:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
+.panel[hidden]{display:none}
+.row{display:flex;flex-wrap:wrap;gap:12px;align-items:end;margin-bottom:14px}
+label{display:flex;flex-direction:column;font-size:.9rem;color:var(--mute);gap:2px}
+input{font:15px Consolas,ui-monospace,monospace;direction:ltr;padding:7px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
+#f{width:260px;max-width:100%}#x0{width:90px}#tol{width:110px}
+.run{font:inherit;font-weight:800;padding:8px 26px;border:0;border-radius:8px;background:var(--ok);color:var(--accfg);cursor:pointer}
+.out{display:grid;grid-template-columns:minmax(0,430px) minmax(0,1fr);gap:14px}
+@media (max-width:800px){.out{grid-template-columns:1fr}}
+pre{margin:0;direction:ltr;text-align:left;font:13px/1.55 Consolas,ui-monospace,monospace}
+#res{background:var(--code);color:var(--codefg);padding:12px;border-radius:8px;height:420px;overflow:auto}
+canvas{width:100%;height:420px;background:#fff;border:1px solid var(--line);border-radius:8px;display:block}
+.codewrap{position:relative}
+#src{background:var(--code);color:var(--codefg);padding:16px;border-radius:8px;max-height:70vh;overflow:auto}
+.copy{position:absolute;top:8px;left:8px;font:inherit;font-size:.85rem;padding:4px 12px;border-radius:6px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}
+</style>
+</head>
+<body>
+<main>
+<div class="tabs" role="tablist">
+<button role="tab" id="t1" aria-selected="true">تشغيل (JavaScript)</button>
+<button role="tab" id="t2" aria-selected="false">الكود الأصلي (C#)</button>
+</div>
+
+<section class="panel" id="p1">
+<div class="row">
+<label>f(x) =<input id="f" value="x^3 - 8*x + 5"></label>
+<label>x0 =<input id="x0" value="0"></label>
+<label>error &lt;<input id="tol" value="0.0001"></label>
+<button class="run" id="go">Solve</button>
+</div>
+<div class="out">
+<pre id="res"></pre>
+<canvas id="cv" width="640" height="420"></canvas>
+</div>
+</section>
+
+<section class="panel" id="p2" hidden>
+<div class="codewrap">
+<button class="copy" id="cp">نسخ الكود</button>
+<pre id="src"></pre>
+</div>
+</section>
+</main>
+
+<script type="text/plain" id="cs">
+using System;
+using System.Collections.Generic;
+using System.Drawing;
+using System.Globalization;
+using System.Linq;
+using System.Text;
+using System.Windows.Forms;
+
+// Newton-Raphson Solver (Windows Forms)
+// 1) user types f(x) and x0
+// 2) x(i+1) = x(i) - f(x(i)) / f'(x(i)) is repeated until the result is stable
+// 3) shows: number of iterations, result of each iteration, graph of f and the points
+
+static class Program
+{
+    [STAThread]
+    static void Main()
+    {
+        Application.EnableVisualStyles();
+        Application.SetCompatibleTextRenderingDefault(false);
+        Application.Run(new MainForm());
+    }
+}
+
+// ---------- Reads a typed function like  x^3 - 8x + 5  ----------
+class ExprParser
+{
+    readonly string s;
+    int pos;
+    double xv;
+
+    ExprParser(string text) { s = text; }
+
+    public static Func<double, double> Compile(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) throw new Exception("Function is empty");
+        new ExprParser(text).Eval(1.0); // test: throws if the syntax is wrong
+        return x => new ExprParser(text).Eval(x);
+    }
+
+    double Eval(double x)
+    {
+        xv = x; pos = 0;
+        double v = Expr();
+        Skip();
+        if (pos < s.Length) throw new Exception("Unexpected '" + s[pos] + "'");
+        return v;
+    }
+
+    void Skip() { while (pos < s.Length && char.IsWhiteSpace(s[pos])) pos++; }
+    bool Peek(char c) { Skip(); return pos < s.Length && s[pos] == c; }
+
+    double Expr()
+    {
+        double v = Term();
+        while (true)
+        {
+            if (Peek('+')) { pos++; v += Term(); }
+            else if (Peek('-')) { pos++; v -= Term(); }
+            else return v;
+        }
+    }
+
+    double Term()
+    {
+        double v = Unary();
+        while (true)
+        {
+            if (Peek('*')) { pos++; v *= Unary(); }
+            else if (Peek('/')) { pos++; v /= Unary(); }
+            else
+            {
+                Skip();
+                // implicit multiplication: 8x, 2(x+1)
+                if (pos < s.Length && (char.IsLetter(s[pos]) || s[pos] == '(')) v *= Unary();
+                else return v;
+            }
+        }
+    }
+
+    double Unary()
+    {
+        if (Peek('-')) { pos++; return -Unary(); }
+        if (Peek('+')) { pos++; return Unary(); }
+        return Power();
+    }
+
+    double Power()
+    {
+        double b = Atom();
+        if (Peek('^')) { pos++; double ex = Unary(); return Math.Pow(b, ex); }
+        return b;
+    }
+
+    double Atom()
+    {
+        Skip();
+        if (pos >= s.Length) throw new Exception("Unexpected end of function");
+        char c = s[pos];
+
+        if (char.IsDigit(c) || c == '.')
+        {
+            int start = pos;
+            while (pos < s.Length && (char.IsDigit(s[pos]) || s[pos] == '.')) pos++;
+            return double.Parse(s.Substring(start, pos - start), CultureInfo.InvariantCulture);
+        }
+        if (c == '(')
+        {
+            pos++;
+            double v = Expr();
+            if (!Peek(')')) throw new Exception("Missing )");
+            pos++;
+            return v;
+        }
+        if (char.IsLetter(c))
+        {
+            int start = pos;
+            while (pos < s.Length && char.IsLetter(s[pos])) pos++;
+            string name = s.Substring(start, pos - start).ToLowerInvariant();
+
+            if (Peek('('))
+            {
+                pos++;
+                double a = Expr();
+                if (!Peek(')')) throw new Exception("Missing )");
+                pos++;
+                switch (name)
+                {
+                    case "sin": return Math.Sin(a);
+                    case "cos": return Math.Cos(a);
+                    case "tan": return Math.Tan(a);
+                    case "exp": return Math.Exp(a);
+                    case "ln": return Math.Log(a);
+                    case "log": return Math.Log10(a);
+                    case "sqrt": return Math.Sqrt(a);
+                    case "abs": return Math.Abs(a);
+                    default: throw new Exception("Unknown function: " + name);
+                }
+            }
+            if (name == "x") return xv;
+            if (name == "e") return Math.E;
+            if (name == "pi") return Math.PI;
+            throw new Exception("Unknown name: " + name);
+        }
+        throw new Exception("Unexpected '" + c + "'");
+    }
+}
+
+// ---------- Panel that draws the graph ----------
+class PlotPanel : Panel
+{
+    public Func<double, double> F;
+    public List<double> Pts = new List<double>();
+    public bool HasRoot;
+
+    public PlotPanel()
+    {
+        DoubleBuffered = true;
+        ResizeRedraw = true;
+    }
+
+    static bool Ok(double v) { return !double.IsNaN(v) && !double.IsInfinity(v) && Math.Abs(v) < 1e6; }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        base.OnPaint(e);
+        if (F == null || Pts.Count == 0) return;
+
+        Graphics g = e.Graphics;
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+
+        int L = 60, R = 20, T = 20, B = 40;
+        int w = Width - L - R, h = Height - T - B;
+        if (w < 50 || h < 50) return;
+
+        // x range around the points
+        double lo = Pts.Min(), hi = Pts.Max();
+        double center = (lo + hi) / 2, half = Math.Max((hi - lo) * 0.8, 2.0);
+        double xmin = center - half, xmax = center + half;
+
+        // sample the curve
+        int N = 400;
+        double[] xsS = new double[N + 1], ysS = new double[N + 1];
+        double ymin = 0, ymax = 0;
+        for (int i = 0; i <= N; i++)
+        {
+            double x = xmin + (xmax - xmin) * i / N;
+            double y = F(x);
+            xsS[i] = x; ysS[i] = y;
+            if (Ok(y)) { ymin = Math.Min(ymin, y); ymax = Math.Max(ymax, y); }
+        }
+        foreach (double p in Pts)
+        {
+            double y = F(p);
+            if (Ok(y)) { ymin = Math.Min(ymin, y); ymax = Math.Max(ymax, y); }
+        }
+        if (ymax - ymin < 1e-9) { ymax += 1; ymin -= 1; }
+        double padY = (ymax - ymin) * 0.1;
+        ymin -= padY; ymax += padY;
+        double rng = ymax - ymin;
+
+        Func<double, float> sx = x => (float)(L + (x - xmin) / (xmax - xmin) * w);
+        Func<double, float> sy = y => (float)(T + (ymax - y) / (ymax - ymin) * h);
+
+        using (Font font = new Font("Segoe UI", 9))
+        using (Pen grid = new Pen(Color.Gainsboro))
+        {
+            // grid + labels
+            for (int k = 0; k <= 5; k++)
+            {
+                double xv = xmin + (xmax - xmin) * k / 5;
+                float px = sx(xv);
+                g.DrawLine(grid, px, T, px, T + h);
+                g.DrawString(xv.ToString("0.##", CultureInfo.InvariantCulture), font, Brushes.Black, px - 12, T + h + 4);
+
+                double yv = ymin + (ymax - ymin) * k / 5;
+                float py = sy(yv);
+                g.DrawLine(grid, L, py, L + w, py);
+                g.DrawString(yv.ToString("0.##", CultureInfo.InvariantCulture), font, Brushes.Black, 4, py - 8);
+            }
+            g.DrawRectangle(Pens.Gray, L, T, w, h);
+
+            // axes
+            g.DrawLine(Pens.Black, L, sy(0), L + w, sy(0));
+            if (xmin < 0 && xmax > 0) g.DrawLine(Pens.Black, sx(0), T, sx(0), T + h);
+
+            g.SetClip(new Rectangle(L, T, w, h));
+
+            // curve
+            using (Pen pen = new Pen(Color.RoyalBlue, 2))
+            {
+                List<PointF> seg = new List<PointF>();
+                for (int i = 0; i <= N; i++)
+                {
+                    double y = ysS[i];
+                    bool good = Ok(y) && y > ymin - 3 * rng && y < ymax + 3 * rng;
+                    if (good) seg.Add(new PointF(sx(xsS[i]), sy(y)));
+                    else
+                    {
+                        if (seg.Count >= 2) g.DrawLines(pen, seg.ToArray());
+                        seg.Clear();
+                    }
+                }
+                if (seg.Count >= 2) g.DrawLines(pen, seg.ToArray());
+            }
+
+            // iteration points
+            for (int i = 0; i < Pts.Count; i++)
+            {
+                double y = F(Pts[i]);
+                if (!Ok(y)) continue;
+                float px = sx(Pts[i]), py = sy(y);
+                g.FillEllipse(Brushes.Red, px - 4, py - 4, 8, 8);
+                g.DrawString(i.ToString(), font, Brushes.DarkRed, px + 5, py - 16);
+            }
+
+            // root
+            if (HasRoot)
+            {
+                double r = Pts[Pts.Count - 1];
+                float px = sx(r), py = sy(0);
+                g.FillEllipse(Brushes.LimeGreen, px - 6, py - 6, 12, 12);
+                g.DrawString("root = " + r.ToString("0.#####", CultureInfo.InvariantCulture),
+                    font, Brushes.DarkGreen, px + 8, py + 6);
+            }
+            g.ResetClip();
+        }
+    }
+}
+
+// ---------- Main window ----------
+class MainForm : Form
+{
+    TextBox txtF = new TextBox();
+    TextBox txtX0 = new TextBox();
+    TextBox txtTol = new TextBox();
+    TextBox txtOut = new TextBox();
+    Button btn = new Button();
+    PlotPanel plot = new PlotPanel();
+
+    public MainForm()
+    {
+        Text = "Newton-Raphson Solver";
+        Width = 1100; Height = 650;
+
+        FlowLayoutPanel top = new FlowLayoutPanel();
+        top.Dock = DockStyle.Top;
+        top.Height = 45;
+        top.Padding = new Padding(5);
+
+        txtF.Width = 260; txtF.Text = "x^3 - 8*x + 5";
+        txtX0.Width = 60; txtX0.Text = "0";
+        txtTol.Width = 80; txtTol.Text = "0.0001";
+        btn.Text = "Solve"; btn.Width = 80;
+        btn.Click += (s, e) => Run();
+        AcceptButton = btn;
+
+        top.Controls.Add(new Label { Text = "f(x) =", AutoSize = true, Margin = new Padding(3, 8, 3, 0) });
+        top.Controls.Add(txtF);
+        top.Controls.Add(new Label { Text = "x0 =", AutoSize = true, Margin = new Padding(10, 8, 3, 0) });
+        top.Controls.Add(txtX0);
+        top.Controls.Add(new Label { Text = "error <", AutoSize = true, Margin = new Padding(10, 8, 3, 0) });
+        top.Controls.Add(txtTol);
+        top.Controls.Add(btn);
+
+        txtOut.Multiline = true;
+        txtOut.ReadOnly = true;
+        txtOut.ScrollBars = ScrollBars.Vertical;
+        txtOut.Dock = DockStyle.Left;
+        txtOut.Width = 430;
+        txtOut.Font = new Font("Consolas", 10);
+
+        plot.Dock = DockStyle.Fill;
+        plot.BackColor = Color.White;
+
+        Controls.Add(plot);
+        Controls.Add(txtOut);
+        Controls.Add(top);
+
+        Shown += (s, e) => Run();
+    }
+
+    static double ParseNum(string t)
+    {
+        return double.Parse(t.Trim().Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture);
+    }
+
+    static string Fmt(double v) { return v.ToString("F6", CultureInfo.InvariantCulture); }
+
+    void Run()
+    {
+        Func<double, double> f;
+        double x0, tol;
+        try
+        {
+            f = ExprParser.Compile(txtF.Text);
+            x0 = ParseNum(txtX0.Text);
+            tol = ParseNum(txtTol.Text);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show("Input error: " + ex.Message);
+            return;
+        }
+
+        // derivative (numerical)
+        Func<double, double> df = x =>
+        {
+            double h = 1e-6 * Math.Max(1.0, Math.Abs(x));
+            return (f(x + h) - f(x - h)) / (2 * h);
+        };
+
+        List<double> xs = new List<double> { x0 };
+        StringBuilder sb = new StringBuilder();
+        sb.AppendLine("f(x) = " + txtF.Text);
+        sb.AppendLine("x0 = " + Fmt(x0));
+        sb.AppendLine();
+        sb.AppendLine(string.Format("{0,-4}{1,-14}{2,-14}{3}", "i", "x_i", "f(x_i)", "|x(i+1)-x(i)|"));
+        sb.AppendLine(string.Format("{0,-4}{1,-14}{2,-14}{3}", 0, Fmt(x0), Fmt(f(x0)), "----"));
+
+        double x = x0;
+        bool ok = false;
+        for (int n = 1; n <= 100; n++)
+        {
+            double d = df(x);
+            if (d == 0 || double.IsNaN(d) || double.IsInfinity(d))
+            {
+                sb.AppendLine("f'(x) is zero or invalid. Try another x0.");
+                break;
+            }
+            double xn = x - f(x) / d;
+            if (double.IsNaN(xn) || double.IsInfinity(xn))
+            {
+                sb.AppendLine("The value blew up. Try another x0.");
+                break;
+            }
+            double err = Math.Abs(xn - x);
+            xs.Add(xn);
+            sb.AppendLine(string.Format("{0,-4}{1,-14}{2,-14}{3}", n, Fmt(xn), Fmt(f(xn)), Fmt(err)));
+            x = xn;
+            if (err < tol) { ok = true; break; }
+        }
+
+        sb.AppendLine();
+        sb.AppendLine("Number of iterations: " + (xs.Count - 1));
+        if (ok)
+        {
+            sb.AppendLine("Root = " + Fmt(x));
+            sb.AppendLine("f(root) = " + Fmt(f(x)));
+        }
+        else sb.AppendLine("No convergence.");
+
+        txtOut.Text = sb.ToString();
+
+        plot.F = f;
+        plot.Pts = xs;
+        plot.HasRoot = ok;
+        plot.Invalidate();
+    }
+}
+</script>
+
+<script>
+const $=id=>document.getElementById(id);
+$('src').textContent=$('cs').textContent.trim();
+
+// tabs
+function tab(n){
+  $('p1').hidden=n!==1;$('p2').hidden=n!==2;
+  $('t1').setAttribute('aria-selected',n===1);$('t2').setAttribute('aria-selected',n===2);
+}
+$('t1').onclick=()=>tab(1);$('t2').onclick=()=>tab(2);
+$('cp').onclick=async()=>{
+  try{await navigator.clipboard.writeText($('src').textContent);$('cp').textContent='تم النسخ'}
+  catch(e){const r=document.createRange();r.selectNodeContents($('src'));const s=getSelection();s.removeAllRanges();s.addRange(r);$('cp').textContent='حدّد الكود واضغط Ctrl+C'}
+  setTimeout(()=>$('cp').textContent='نسخ الكود',2000);
+};
+
+// parser (same grammar as ExprParser in the C# code)
+function compile(s){
+  if(!s.trim())throw Error('الدالة فاضية');
+  let p=0,xv=0;
+  const sk=()=>{while(p<s.length&&/\s/.test(s[p]))p++};
+  const pk=c=>{sk();return p<s.length&&s[p]===c};
+  function ex(){let v=tm();for(;;){if(pk('+')){p++;v+=tm()}else if(pk('-')){p++;v-=tm()}else return v}}
+  function tm(){let v=un();for(;;){if(pk('*')){p++;v*=un()}else if(pk('/')){p++;v/=un()}else{sk();if(p<s.length&&(/[A-Za-z]/.test(s[p])||s[p]==='('))v*=un();else return v}}}
+  function un(){if(pk('-')){p++;return -un()}if(pk('+')){p++;return un()}return pw()}
+  function pw(){const b=at();if(pk('^')){p++;return Math.pow(b,un())}return b}
+  function at(){
+    sk();if(p>=s.length)throw Error('الدالة ناقصة');
+    const c=s[p];
+    if(/[\d.]/.test(c)){const st=p;while(p<s.length&&/[\d.]/.test(s[p]))p++;return parseFloat(s.slice(st,p))}
+    if(c==='('){p++;const v=ex();if(!pk(')'))throw Error('قوس ) ناقص');p++;return v}
+    if(/[A-Za-z]/.test(c)){
+      const st=p;while(p<s.length&&/[A-Za-z]/.test(s[p]))p++;
+      const n=s.slice(st,p).toLowerCase();
+      if(pk('(')){
+        p++;const a=ex();if(!pk(')'))throw Error('قوس ) ناقص');p++;
+        const F={sin:Math.sin,cos:Math.cos,tan:Math.tan,exp:Math.exp,ln:Math.log,log:Math.log10,sqrt:Math.sqrt,abs:Math.abs};
+        if(!F[n])throw Error('دالة غير معروفة: '+n);
+        return F[n](a);
+      }
+      if(n==='x')return xv;if(n==='e')return Math.E;if(n==='pi')return Math.PI;
+      throw Error('اسم غير معروف: '+n);
+    }
+    throw Error("رمز غير متوقع '"+c+"'");
+  }
+  const run=x=>{xv=x;p=0;const v=ex();sk();if(p<s.length)throw Error("رمز غير متوقع '"+s[p]+"'");return v};
+  run(1);return run;
+}
+
+const fm=v=>v.toFixed(6);
+const pad=(t,n)=>String(t).padEnd(n);
+const ok=v=>isFinite(v)&&Math.abs(v)<1e6;
+
+function solve(){
+  let f,x0,tol;
+  try{
+    f=compile($('f').value);
+    x0=parseFloat($('x0').value.replace(',','.'));
+    tol=parseFloat($('tol').value.replace(',','.'));
+    if(isNaN(x0)||isNaN(tol))throw Error('x0 أو error لازم يكونوا أرقام');
+  }catch(e){$('res').textContent='Input error: '+e.message;return}
+  const df=x=>{const h=1e-6*Math.max(1,Math.abs(x));return(f(x+h)-f(x-h))/(2*h)};
+  const xs=[x0];
+  let o='f(x) = '+$('f').value+'\nx0 = '+fm(x0)+'\n\n';
+  o+=pad('i',4)+pad('x_i',14)+pad('f(x_i)',14)+'|x(i+1)-x(i)|\n';
+  o+=pad(0,4)+pad(fm(x0),14)+pad(fm(f(x0)),14)+'----\n';
+  let x=x0,conv=false;
+  for(let n=1;n<=100;n++){
+    const d=df(x);
+    if(d===0||!isFinite(d)){o+="f'(x) is zero or invalid. Try another x0.\n";break}
+    const xn=x-f(x)/d;
+    if(!isFinite(xn)){o+='The value blew up. Try another x0.\n';break}
+    const err=Math.abs(xn-x);
+    xs.push(xn);
+    o+=pad(n,4)+pad(fm(xn),14)+pad(fm(f(xn)),14)+fm(err)+'\n';
+    x=xn;
+    if(err<tol){conv=true;break}
+  }
+  o+='\nNumber of iterations: '+(xs.length-1)+'\n';
+  o+=conv?'Root = '+fm(x)+'\nf(root) = '+fm(f(x))+'\n':'No convergence.\n';
+  $('res').textContent=o;
+  draw(f,xs,conv);
+}
+
+function draw(f,pts,root){
+  const cv=$('cv'),g=cv.getContext('2d'),W=cv.width,H=cv.height;
+  const L=60,R=20,T=20,B=40,w=W-L-R,h=H-T-B;
+  g.clearRect(0,0,W,H);g.fillStyle='#fff';g.fillRect(0,0,W,H);
+  const lo=Math.min(...pts),hi=Math.max(...pts),c=(lo+hi)/2,half=Math.max((hi-lo)*0.8,2);
+  const xmin=c-half,xmax=c+half,N=400,xsS=[],ysS=[];
+  let ymin=0,ymax=0;
+  for(let i=0;i<=N;i++){const x=xmin+(xmax-xmin)*i/N,y=f(x);xsS.push(x);ysS.push(y);if(ok(y)){ymin=Math.min(ymin,y);ymax=Math.max(ymax,y)}}
+  pts.forEach(p=>{const y=f(p);if(ok(y)){ymin=Math.min(ymin,y);ymax=Math.max(ymax,y)}});
+  if(ymax-ymin<1e-9){ymax+=1;ymin-=1}
+  const pd=(ymax-ymin)*0.1;ymin-=pd;ymax+=pd;const rng=ymax-ymin;
+  const sx=x=>L+(x-xmin)/(xmax-xmin)*w,sy=y=>T+(ymax-y)/rng*h;
+  g.font='12px Consolas,monospace';g.lineWidth=1;
+  for(let k=0;k<=5;k++){
+    const xv=xmin+(xmax-xmin)*k/5,px=sx(xv);
+    g.strokeStyle='#dcdcdc';g.beginPath();g.moveTo(px,T);g.lineTo(px,T+h);g.stroke();
+    g.fillStyle='#000';g.fillText(+xv.toFixed(2),px-12,T+h+18);
+    const yv=ymin+rng*k/5,py=sy(yv);
+    g.beginPath();g.moveTo(L,py);g.lineTo(L+w,py);g.stroke();
+    g.fillText(+yv.toFixed(2),4,py+4);
+  }
+  g.strokeStyle='#888';g.strokeRect(L,T,w,h);
+  g.strokeStyle='#000';g.beginPath();g.moveTo(L,sy(0));g.lineTo(L+w,sy(0));g.stroke();
+  if(xmin<0&&xmax>0){g.beginPath();g.moveTo(sx(0),T);g.lineTo(sx(0),T+h);g.stroke()}
+  g.save();g.beginPath();g.rect(L,T,w,h);g.clip();
+  g.strokeStyle='#4169e1';g.lineWidth=2;
+  let pen=false;g.beginPath();
+  for(let i=0;i<=N;i++){
+    const y=ysS[i],good=ok(y)&&y>ymin-3*rng&&y<ymax+3*rng;
+    if(good){pen?g.lineTo(sx(xsS[i]),sy(y)):g.moveTo(sx(xsS[i]),sy(y));pen=true}else pen=false;
+  }
+  g.stroke();
+  pts.forEach((p,i)=>{
+    const y=f(p);if(!ok(y))return;
+    g.fillStyle='#e03131';g.beginPath();g.arc(sx(p),sy(y),4,0,7);g.fill();
+    g.fillStyle='#8b0000';g.fillText(i,sx(p)+5,sy(y)-8);
+  });
+  if(root){
+    const r=pts[pts.length-1];
+    g.fillStyle='#32cd32';g.beginPath();g.arc(sx(r),sy(0),6,0,7);g.fill();
+    g.fillStyle='#006400';g.fillText('root = '+(+r.toFixed(5)),sx(r)+8,sy(0)+18);
+  }
+  g.restore();
+}
+
+$('go').onclick=solve;
+['f','x0','tol'].forEach(i=>$(i).addEventListener('keydown',e=>{if(e.key==='Enter')solve()}));
+solve();
+</script>
+</body>
+</html>
